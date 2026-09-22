@@ -1,0 +1,6 @@
+{
+  "name": "DELIVR",
+  "description": "Real-time food delivery application with live order tracking, GPS courier movement, interactive menus, and driver messaging.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
