@@ -106,8 +106,84 @@ export const RealtimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const socketRef = useRef<WebSocket | null>(null);
 
-  // WebSocket Connection
+  // WebSocket Connection & Static Fallback Simulation
   useEffect(() => {
+    const isStaticHost = window.location.hostname.endsWith('github.io');
+    let localSimInterval: any = null;
+
+    // Local client-side simulation ticker for static hosting (GitHub Pages) or offline mode
+    const startLocalSimulation = () => {
+      if (localSimInterval) return;
+      const streets = [
+        'Turning onto 100 Feet Road',
+        'Passing 12th Main Junction',
+        'Crossing CMH Road signal',
+        'Entering 5th Main Road',
+        'Approaching Skyline Heights gate',
+      ];
+
+      localSimInterval = setInterval(() => {
+        setActiveOrder((prev) => {
+          if (prev.status === 'delivered' || prev.status === 'cancelled') {
+            return prev;
+          }
+
+          const newProgress = Math.min(100, Math.round((prev.driverProgressPercent + 1.5) * 10) / 10);
+          const remainingMins = Math.max(1, Math.round((1 - newProgress / 100) * 18));
+          const streetIdx = Math.min(streets.length - 1, Math.floor((newProgress / 100) * streets.length));
+          const remainingKm = (Math.max(0.1, (1 - newProgress / 100) * 2.8)).toFixed(1);
+
+          let updatedStatus: OrderStatus = prev.status;
+          if (newProgress >= 99) {
+            updatedStatus = 'delivered';
+          } else if (newProgress >= 25 && prev.status === 'confirmed') {
+            updatedStatus = 'preparing';
+          } else if (newProgress >= 40 && prev.status === 'preparing') {
+            updatedStatus = 'picked_up';
+          } else if (newProgress >= 50 && prev.status === 'picked_up') {
+            updatedStatus = 'on_the_way';
+          }
+
+          const orderStatuses: OrderStatus[] = ['confirmed', 'preparing', 'picked_up', 'on_the_way', 'delivered'];
+          const activeIdx = orderStatuses.indexOf(updatedStatus);
+
+          return {
+            ...prev,
+            status: updatedStatus,
+            remainingMinutes: updatedStatus === 'delivered' ? 0 : remainingMins,
+            driverProgressPercent: newProgress,
+            progressSteps: prev.progressSteps.map((step) => {
+              const stepIdx = orderStatuses.indexOf(step.id);
+              return {
+                ...step,
+                completed: stepIdx <= activeIdx,
+                current: stepIdx === activeIdx,
+              };
+            }),
+            driver: {
+              ...prev.driver,
+              currentLocation: {
+                ...prev.driver.currentLocation,
+                speed: updatedStatus === 'delivered' ? 0 : 28,
+                addressDescription:
+                  updatedStatus === 'delivered'
+                    ? 'Delivered at doorstep'
+                    : `${remainingKm} km away • ${streets[streetIdx]}`,
+              },
+            },
+          };
+        });
+      }, 3000);
+    };
+
+    if (isStaticHost) {
+      setIsConnected(true);
+      startLocalSimulation();
+      return () => {
+        if (localSimInterval) clearInterval(localSimInterval);
+      };
+    }
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}/ws`;
 
@@ -121,6 +197,10 @@ export const RealtimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
         ws.onopen = () => {
           setIsConnected(true);
+          if (localSimInterval) {
+            clearInterval(localSimInterval);
+            localSimInterval = null;
+          }
         };
 
         ws.onmessage = (event) => {
@@ -163,16 +243,19 @@ export const RealtimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
         ws.onclose = () => {
           setIsConnected(false);
-          reconnectTimeout = setTimeout(connect, 3000);
+          startLocalSimulation();
+          reconnectTimeout = setTimeout(connect, 4000);
         };
 
         ws.onerror = () => {
           setIsConnected(false);
+          startLocalSimulation();
           ws.close();
         };
       } catch (err) {
         setIsConnected(false);
-        reconnectTimeout = setTimeout(connect, 3000);
+        startLocalSimulation();
+        reconnectTimeout = setTimeout(connect, 4000);
       }
     }
 
@@ -180,6 +263,7 @@ export const RealtimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     return () => {
       clearTimeout(reconnectTimeout);
+      if (localSimInterval) clearInterval(localSimInterval);
       if (ws) ws.close();
     };
   }, []);
