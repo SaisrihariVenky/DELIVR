@@ -108,7 +108,14 @@ export const RealtimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   // WebSocket Connection & Static Fallback Simulation
   useEffect(() => {
-    const isStaticHost = window.location.hostname.endsWith('github.io');
+    const isStaticHost =
+      typeof window !== 'undefined' &&
+      (window.location.hostname.endsWith('github.io') ||
+        window.location.hostname.endsWith('github.com') ||
+        window.location.protocol === 'file:' ||
+        window.location.hostname.includes('pages.dev') ||
+        window.location.hostname.includes('vercel.app') ||
+        window.location.hostname.includes('netlify.app'));
     let localSimInterval: any = null;
 
     // Local client-side simulation ticker for static hosting (GitHub Pages) or offline mode
